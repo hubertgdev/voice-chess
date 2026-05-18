@@ -102,6 +102,24 @@ describe('parseUtterance (French)', () => {
     if (r.kind === 'square') expect(r.square).toBe('e2')
   })
 
+  it('handles Vosk-FR "deux"→"de" misrecognition', () => {
+    const r = parseUtterance('b de', 'fr')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('b2')
+  })
+
+  it('handles "de" as both a file (D) and a rank (2) by position', () => {
+    const r = parseUtterance('de de', 'fr')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('d2')
+  })
+
+  it('parses a full French move with "de" for rank 2', () => {
+    const r = parseUtterance('b de d cinq', 'fr')
+    expect(r.kind).toBe('move')
+    if (r.kind === 'move') expect(r.move).toEqual({ from: 'b2', to: 'd5' })
+  })
+
   it('recognises a French reset', () => {
     expect(parseUtterance('recommencer', 'fr').kind).toBe('reset')
   })

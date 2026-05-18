@@ -93,6 +93,8 @@ const RANK_TOKENS_FR: TokenMap<Rank> = {
   une: '1',
   '2': '2',
   deux: '2',
+  de: '2',
+  du: '2',
   '3': '3',
   trois: '3',
   '4': '4',
@@ -104,6 +106,8 @@ const RANK_TOKENS_FR: TokenMap<Rank> = {
   six: '6',
   '7': '7',
   sept: '7',
+  set: '7',
+  cette: '7',
   '8': '8',
   huit: '8',
 }
