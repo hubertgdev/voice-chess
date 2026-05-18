@@ -18,6 +18,8 @@ const COLOR_LEGAL_DOT = 0x000000
 const COLOR_CHECK = 0xff5b5b
 const COLOR_BG = 0x312e2b
 const COLOR_TEXT = 0xeeeeee
+const COLOR_HOVER = 0xffffff
+const COLOR_HOVER_LEGAL = 0x7ed957
 
 interface Highlights {
   selected: Square | null
@@ -56,9 +58,11 @@ export class BoardView {
     check: null,
   }
   private session: PointerSession | null = null
+  private hoverSquare: Square | null = null
   private handlePointerDown = (e: PointerEvent) => this.onPointerDown(e)
   private handlePointerMove = (e: PointerEvent) => this.onPointerMove(e)
   private handlePointerUp = (e: PointerEvent) => this.onPointerUp(e)
+  private handleCanvasLeave = () => this.clearHover()
 
   constructor() {
     this.app = new Application()
@@ -90,6 +94,7 @@ export class BoardView {
     this.app.stage.addChild(this.legalLayer)
 
     this.app.canvas.addEventListener('pointerdown', this.handlePointerDown)
+    this.app.canvas.addEventListener('pointerleave', this.handleCanvasLeave)
     window.addEventListener('pointermove', this.handlePointerMove)
     window.addEventListener('pointerup', this.handlePointerUp)
     window.addEventListener('pointercancel', this.handlePointerUp)
@@ -175,6 +180,7 @@ export class BoardView {
 
   destroy(): void {
     this.app.canvas.removeEventListener('pointerdown', this.handlePointerDown)
+    this.app.canvas.removeEventListener('pointerleave', this.handleCanvasLeave)
     window.removeEventListener('pointermove', this.handlePointerMove)
     window.removeEventListener('pointerup', this.handlePointerUp)
     window.removeEventListener('pointercancel', this.handlePointerUp)
@@ -196,6 +202,7 @@ export class BoardView {
   }
 
   private onPointerMove(event: PointerEvent): void {
+    this.updateHover(event.clientX, event.clientY)
     if (!this.session || event.pointerId !== this.session.pointerId) return
     if (!this.session.drag) {
       const dx = event.clientX - this.session.startClientX
@@ -251,6 +258,19 @@ export class BoardView {
         this.onSquareClick?.(session.startSquare)
       }
     }
+  }
+
+  private updateHover(clientX: number, clientY: number): void {
+    const sq = this.squareFromClient(clientX, clientY)
+    if (sq === this.hoverSquare) return
+    this.hoverSquare = sq
+    if (this.highlights.selected) this.drawHighlights()
+  }
+
+  private clearHover(): void {
+    if (this.hoverSquare === null) return
+    this.hoverSquare = null
+    if (this.highlights.selected) this.drawHighlights()
   }
 
   private squareFromClient(clientX: number, clientY: number): Square | null {
@@ -373,6 +393,16 @@ export class BoardView {
       g.x = x
       g.y = y
       this.legalLayer.addChild(g)
+    }
+
+    if (selected && this.hoverSquare && this.hoverSquare !== selected) {
+      const { x, y } = squareToPixel(this.hoverSquare)
+      const isLegal = legal.includes(this.hoverSquare)
+      const color = isLegal ? COLOR_HOVER_LEGAL : COLOR_HOVER
+      const g = new Graphics().rect(0, 0, SQUARE_SIZE, SQUARE_SIZE).stroke({ color, width: 3, alignment: 1 })
+      g.x = x
+      g.y = y
+      this.highlightLayer.addChild(g)
     }
   }
 }
