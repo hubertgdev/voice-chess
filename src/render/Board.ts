@@ -8,6 +8,7 @@ const SQUARE_SIZE = 72
 const MARGIN = 24
 const BOARD_PX = SQUARE_SIZE * 8
 const CANVAS_PX = BOARD_PX + MARGIN * 2
+const DRAG_THRESHOLD = 5
 
 const COLOR_LIGHT = 0xf0d9b5
 const COLOR_DARK = 0xb58863
@@ -25,6 +26,19 @@ interface Highlights {
   check: Square | null
 }
 
+interface PointerSession {
+  pointerId: number
+  startSquare: Square | null
+  startClientX: number
+  startClientY: number
+  drag: {
+    from: Square
+    sprite: Text
+    originX: number
+    originY: number
+  } | null
+}
+
 export class BoardView {
   readonly app: Application
   private boardLayer = new Container()
@@ -33,12 +47,18 @@ export class BoardView {
   private pieceLayer = new Container()
   private sprites = new Map<Square, Text>()
   private onSquareClick: ((sq: Square) => void) | null = null
+  private onDragStart: ((from: Square) => boolean) | null = null
+  private onDragEnd: ((from: Square, to: Square | null) => boolean) | null = null
   private highlights: Highlights = {
     selected: null,
     legal: [],
     lastMove: null,
     check: null,
   }
+  private session: PointerSession | null = null
+  private handlePointerDown = (e: PointerEvent) => this.onPointerDown(e)
+  private handlePointerMove = (e: PointerEvent) => this.onPointerMove(e)
+  private handlePointerUp = (e: PointerEvent) => this.onPointerUp(e)
 
   constructor() {
     this.app = new Application()
@@ -58,6 +78,7 @@ export class BoardView {
     this.app.canvas.style.display = 'block'
     this.app.canvas.style.maxWidth = '100%'
     this.app.canvas.style.height = 'auto'
+    this.app.canvas.style.touchAction = 'none'
 
     this.boardLayer.position.set(MARGIN, MARGIN)
     this.highlightLayer.position.set(MARGIN, MARGIN)
@@ -68,6 +89,11 @@ export class BoardView {
     this.app.stage.addChild(this.pieceLayer)
     this.app.stage.addChild(this.legalLayer)
 
+    this.app.canvas.addEventListener('pointerdown', this.handlePointerDown)
+    window.addEventListener('pointermove', this.handlePointerMove)
+    window.addEventListener('pointerup', this.handlePointerUp)
+    window.addEventListener('pointercancel', this.handlePointerUp)
+
     this.drawSquares()
     this.drawCoordinates()
     this.drawHighlights()
@@ -75,6 +101,14 @@ export class BoardView {
 
   setOnSquareClick(handler: (sq: Square) => void): void {
     this.onSquareClick = handler
+  }
+
+  setOnDragStart(handler: (from: Square) => boolean): void {
+    this.onDragStart = handler
+  }
+
+  setOnDragEnd(handler: (from: Square, to: Square | null) => boolean): void {
+    this.onDragEnd = handler
   }
 
   setHighlights(h: Partial<Highlights>): void {
@@ -140,7 +174,103 @@ export class BoardView {
   }
 
   destroy(): void {
+    this.app.canvas.removeEventListener('pointerdown', this.handlePointerDown)
+    window.removeEventListener('pointermove', this.handlePointerMove)
+    window.removeEventListener('pointerup', this.handlePointerUp)
+    window.removeEventListener('pointercancel', this.handlePointerUp)
     this.app.destroy(true, { children: true })
+  }
+
+  private onPointerDown(event: PointerEvent): void {
+    if (event.button !== 0 && event.pointerType === 'mouse') return
+    if (this.session) return
+    const square = this.squareFromClient(event.clientX, event.clientY)
+    this.session = {
+      pointerId: event.pointerId,
+      startSquare: square,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      drag: null,
+    }
+    event.preventDefault()
+  }
+
+  private onPointerMove(event: PointerEvent): void {
+    if (!this.session || event.pointerId !== this.session.pointerId) return
+    if (!this.session.drag) {
+      const dx = event.clientX - this.session.startClientX
+      const dy = event.clientY - this.session.startClientY
+      if (dx * dx + dy * dy < DRAG_THRESHOLD * DRAG_THRESHOLD) return
+      if (!this.session.startSquare) return
+      const from = this.session.startSquare
+      const sprite = this.sprites.get(from)
+      if (!sprite) return
+      if (!this.onDragStart?.(from)) return
+      const { x, y } = squareToPixel(from)
+      this.session.drag = {
+        from,
+        sprite,
+        originX: x + SQUARE_SIZE / 2,
+        originY: y + SQUARE_SIZE / 2,
+      }
+      this.pieceLayer.removeChild(sprite)
+      this.pieceLayer.addChild(sprite)
+      sprite.scale.set(1.08)
+      sprite.alpha = 0.95
+    }
+    const local = this.clientToBoardLocal(event.clientX, event.clientY)
+    this.session.drag.sprite.x = local.x
+    this.session.drag.sprite.y = local.y
+  }
+
+  private onPointerUp(event: PointerEvent): void {
+    if (!this.session || event.pointerId !== this.session.pointerId) return
+    const session = this.session
+    this.session = null
+
+    if (session.drag) {
+      const drop = this.squareFromClient(event.clientX, event.clientY)
+      const accepted = this.onDragEnd?.(session.drag.from, drop) ?? false
+      const sprite = session.drag.sprite
+      sprite.scale.set(1)
+      sprite.alpha = 1
+      if (!accepted) {
+        gsap.to(sprite, {
+          x: session.drag.originX,
+          y: session.drag.originY,
+          duration: 0.18,
+          ease: 'power2.out',
+        })
+      }
+      return
+    }
+
+    if (session.startSquare) {
+      const releaseSquare = this.squareFromClient(event.clientX, event.clientY)
+      if (releaseSquare === session.startSquare) {
+        this.onSquareClick?.(session.startSquare)
+      }
+    }
+  }
+
+  private squareFromClient(clientX: number, clientY: number): Square | null {
+    const local = this.clientToBoardLocal(clientX, clientY)
+    const f = Math.floor(local.x / SQUARE_SIZE)
+    const r = Math.floor(local.y / SQUARE_SIZE)
+    if (f < 0 || f > 7 || r < 0 || r > 7) return null
+    const file = FILES[f]
+    const rank = RANKS[7 - r]
+    if (!file || !rank) return null
+    return `${file}${rank}` as Square
+  }
+
+  private clientToBoardLocal(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.app.canvas.getBoundingClientRect()
+    const scaleX = rect.width === 0 ? 1 : CANVAS_PX / rect.width
+    const scaleY = rect.height === 0 ? 1 : CANVAS_PX / rect.height
+    const x = (clientX - rect.left) * scaleX - MARGIN
+    const y = (clientY - rect.top) * scaleY - MARGIN
+    return { x, y }
   }
 
   private createSprite(piece: PieceOn): Text {
@@ -179,9 +309,6 @@ export class BoardView {
         const { x, y } = squareToPixel(sq)
         g.x = x
         g.y = y
-        g.eventMode = 'static'
-        g.cursor = 'pointer'
-        g.on('pointertap', () => this.onSquareClick?.(sq))
         this.boardLayer.addChild(g)
       }
     }

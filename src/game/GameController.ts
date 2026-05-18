@@ -48,6 +48,8 @@ export class GameController {
     root.appendChild(boardContainer)
     await this.board.init(boardContainer)
     this.board.setOnSquareClick((sq) => this.handleSquareClick(sq))
+    this.board.setOnDragStart((from) => this.handleDragStart(from))
+    this.board.setOnDragEnd((from, to) => this.handleDragEnd(from, to))
     this.status.setSkill(this.skill)
     this.status.setAi(false)
     this.syncBoard()
@@ -55,11 +57,8 @@ export class GameController {
   }
 
   private handleSquareClick(sq: Square): void {
-    if (this.isAnimating || this.aiThinking) return
+    if (!this.canHumanInteract()) return
     const status = this.engine.status()
-    if (status.gameOver) return
-    if (this.aiEnabled && status.turn === AI_COLOR) return
-
     const piece = this.engine.pieceAt(sq)
 
     if (this.selected) {
@@ -78,6 +77,50 @@ export class GameController {
     if (piece && piece.color === status.turn) {
       this.selectSquare(sq)
     }
+  }
+
+  private handleDragStart(from: Square): boolean {
+    if (!this.canHumanInteract()) return false
+    const piece = this.engine.pieceAt(from)
+    const status = this.engine.status()
+    if (!piece || piece.color !== status.turn) return false
+    this.selected = from
+    this.board.setHighlights({
+      selected: from,
+      legal: this.engine.legalDestinations(from),
+    })
+    return true
+  }
+
+  private handleDragEnd(from: Square, to: Square | null): boolean {
+    if (!to || to === from) {
+      this.clearSelection()
+      return false
+    }
+    if (!this.engine.legalDestinations(from).includes(to)) {
+      this.clearSelection()
+      return false
+    }
+    const result = this.engine.move(from, to)
+    if (!result.ok) {
+      this.clearSelection()
+      return false
+    }
+    this.lastMove = { from, to }
+    this.selected = null
+    this.board.setPieces(this.engine.pieces())
+    this.refreshStatus(result.san)
+    this.refreshHighlights()
+    void this.maybeTriggerAi()
+    return true
+  }
+
+  private canHumanInteract(): boolean {
+    if (this.isAnimating || this.aiThinking) return false
+    const status = this.engine.status()
+    if (status.gameOver) return false
+    if (this.aiEnabled && status.turn === AI_COLOR) return false
+    return true
   }
 
   private selectSquare(sq: Square): void {

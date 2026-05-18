@@ -55,6 +55,14 @@ body {
   width: 100%;
 }
 
+.board-container canvas {
+  cursor: grab;
+}
+
+.board-container canvas:active {
+  cursor: grabbing;
+}
+
 .status-bar {
   width: 100%;
   background: var(--panel);
