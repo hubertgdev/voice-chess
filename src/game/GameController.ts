@@ -1,0 +1,208 @@
+import { BoardView } from '../render/Board'
+import type { Color, Language, Square } from '../types'
+import { StatusBar } from '../ui/StatusBar'
+import { parseUtterance } from '../voice/parser'
+import type { VoiceState } from '../voice/VoiceController'
+import { VoiceController } from '../voice/VoiceController'
+import { ChessEngine } from './ChessEngine'
+
+export class GameController {
+  private engine = new ChessEngine()
+  private board = new BoardView()
+  private status: StatusBar
+  private voice: VoiceController
+  private selected: Square | null = null
+  private lastMove: { from: Square; to: Square } | null = null
+  private language: Language = 'en'
+  private isAnimating = false
+
+  constructor() {
+    this.status = new StatusBar({
+      onReset: () => this.reset(),
+      onToggleVoice: () => this.toggleVoice(),
+      onLanguageChange: (lang) => this.changeLanguage(lang),
+    })
+    this.voice = new VoiceController(this.language, {
+      onFinal: (text) => this.handleVoiceFinal(text),
+      onPartial: (text) => this.status.setPartial(text),
+      onError: (err) => this.status.setMessage(err, 'error'),
+      onStateChange: (s) => this.handleVoiceStateChange(s),
+    })
+  }
+
+  async mount(root: HTMLElement): Promise<void> {
+    root.appendChild(this.status.root)
+    const boardContainer = document.createElement('div')
+    boardContainer.className = 'board-container'
+    root.appendChild(boardContainer)
+    await this.board.init(boardContainer)
+    this.board.setOnSquareClick((sq) => this.handleSquareClick(sq))
+    this.syncBoard()
+    this.refreshStatus()
+  }
+
+  private handleSquareClick(sq: Square): void {
+    if (this.isAnimating) return
+    const status = this.engine.status()
+    if (status.gameOver) return
+
+    const piece = this.engine.pieceAt(sq)
+
+    if (this.selected) {
+      if (this.selected === sq) {
+        this.clearSelection()
+        return
+      }
+      if (piece && piece.color === status.turn) {
+        this.selectSquare(sq)
+        return
+      }
+      void this.attemptMove(this.selected, sq)
+      return
+    }
+
+    if (piece && piece.color === status.turn) {
+      this.selectSquare(sq)
+    }
+  }
+
+  private selectSquare(sq: Square): void {
+    this.selected = sq
+    this.board.setHighlights({
+      selected: sq,
+      legal: this.engine.legalDestinations(sq),
+    })
+  }
+
+  private clearSelection(): void {
+    this.selected = null
+    this.board.setHighlights({ selected: null, legal: [] })
+  }
+
+  private async attemptMove(from: Square, to: Square): Promise<void> {
+    const result = this.engine.move(from, to)
+    if (!result.ok) {
+      this.status.setMessage(`Illegal move: ${from} → ${to}`, 'error')
+      this.clearSelection()
+      return
+    }
+    this.lastMove = { from, to }
+    this.selected = null
+    this.isAnimating = true
+    this.board.setHighlights({ selected: null, legal: [] })
+    await this.board.animateMove(from, to, this.engine.pieces())
+    this.isAnimating = false
+    this.refreshStatus(result.san)
+    this.refreshHighlights()
+  }
+
+  private handleVoiceFinal(text: string): void {
+    if (!text) return
+    this.status.setPartial('')
+    const outcome = parseUtterance(text, this.language)
+    if (outcome.kind === 'reset') {
+      this.reset()
+      this.status.setMessage('Game reset', 'success')
+      return
+    }
+    if (outcome.kind === 'move') {
+      const { from, to } = outcome.move
+      this.status.setMessage(`Heard: ${from} → ${to}`, 'info')
+      void this.attemptMove(from, to)
+      return
+    }
+    if (outcome.kind === 'incomplete') {
+      this.status.setMessage(`Heard partial: ${outcome.partial.join('')}`, 'error')
+      return
+    }
+    this.status.setMessage(`Did not understand: "${text}"`, 'error')
+  }
+
+  private handleVoiceStateChange(s: VoiceState): void {
+    switch (s) {
+      case 'idle':
+        this.status.setVoiceLabel('Enable voice')
+        break
+      case 'loading':
+        this.status.setVoiceLabel('Loading…', true)
+        break
+      case 'listening':
+        this.status.setVoiceLabel('Stop voice')
+        this.status.setMessage('Listening — speak a move like "e2 e4"', 'success')
+        break
+      case 'error':
+        this.status.setVoiceLabel('Enable voice')
+        break
+    }
+  }
+
+  private async toggleVoice(): Promise<void> {
+    if (this.voice.getState() === 'listening' || this.voice.getState() === 'loading') {
+      await this.voice.stop()
+      return
+    }
+    await this.voice.start()
+  }
+
+  private async changeLanguage(lang: Language): Promise<void> {
+    this.language = lang
+    await this.voice.setLanguage(lang)
+    this.status.setLanguage(lang)
+  }
+
+  private reset(): void {
+    this.engine.reset()
+    this.selected = null
+    this.lastMove = null
+    this.syncBoard()
+    this.refreshStatus()
+    this.refreshHighlights()
+    this.status.setMessage('New game', 'success')
+  }
+
+  private syncBoard(): void {
+    this.board.setPieces(this.engine.pieces())
+  }
+
+  private refreshStatus(san?: string): void {
+    const s = this.engine.status()
+    this.status.setTurn(s.turn, s.inCheck)
+    if (s.checkmate) {
+      this.status.setMessage(`Checkmate. ${winnerLabel(s.winner)} wins${san ? ` (${san})` : ''}`, 'success')
+      return
+    }
+    if (s.stalemate) {
+      this.status.setMessage('Stalemate — draw', 'info')
+      return
+    }
+    if (s.draw) {
+      this.status.setMessage('Draw', 'info')
+      return
+    }
+    if (san) this.status.setMessage(`Move: ${san}`, 'info')
+  }
+
+  private refreshHighlights(): void {
+    const s = this.engine.status()
+    let checkSquare: Square | null = null
+    if (s.inCheck) {
+      for (const p of this.engine.pieces()) {
+        if (p.type === 'k' && p.color === s.turn) {
+          checkSquare = p.square
+          break
+        }
+      }
+    }
+    this.board.setHighlights({
+      selected: null,
+      legal: [],
+      lastMove: this.lastMove,
+      check: checkSquare,
+    })
+  }
+}
+
+function winnerLabel(color: Color | null): string {
+  if (!color) return ''
+  return color === 'w' ? 'White' : 'Black'
+}

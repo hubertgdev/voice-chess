@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Vosk models — large binaries, downloaded locally
+public/models/*
+!public/models/README.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

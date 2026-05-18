@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: process.env.BASE_URL ?? '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
