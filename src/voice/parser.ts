@@ -14,7 +14,7 @@ export function parseUtterance(raw: string, lang: Language): ParseOutcome {
 
   const dict = getDictionary(lang)
   const rawTokens = trimmed
-    .replace(/[.,;!?]/g, ' ')
+    .replace(/[.,;!?'‘’`]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
     .flatMap((t) => splitCompound(t))

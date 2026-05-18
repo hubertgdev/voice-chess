@@ -120,6 +120,18 @@ describe('parseUtterance (French)', () => {
     if (r.kind === 'move') expect(r.move).toEqual({ from: 'b2', to: 'd5' })
   })
 
+  it('handles Vosk-FR elision "c\'est deux" as C2', () => {
+    const r = parseUtterance("c'est deux", 'fr')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('c2')
+  })
+
+  it('handles a curly apostrophe in the elision', () => {
+    const r = parseUtterance('c’est deux', 'fr')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('c2')
+  })
+
   it('recognises a French reset', () => {
     expect(parseUtterance('recommencer', 'fr').kind).toBe('reset')
   })
