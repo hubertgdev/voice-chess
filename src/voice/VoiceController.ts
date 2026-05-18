@@ -1,8 +1,8 @@
 import type { Language } from '../types'
 
 const MODEL_URLS: Record<Language, string> = {
-  en: 'models/vosk-model-small-en-us.zip',
-  fr: 'models/vosk-model-small-fr.zip',
+  en: 'models/vosk-model-small-en-us-0.15.tar.gz',
+  fr: 'models/vosk-model-small-fr-0.22.tar.gz',
 }
 
 export interface VoiceEvents {

@@ -1,12 +1,16 @@
 # Vosk models
 
-Drop Vosk small-models here as `.zip` archives (vosk-browser loads zip files directly).
+This folder is populated automatically before `dev` / `build` by
+`scripts/fetch-vosk-models.mjs`, which:
 
-Expected filenames (referenced by `src/voice/VoiceController.ts`):
+1. Downloads the small Vosk model zips from <https://alphacephei.com/vosk/models>.
+2. Unzips them and repackages each as a single `.tar.gz` — the only
+   archive format `vosk-browser` accepts.
 
-- `vosk-model-small-en-us.zip` — English
-- `vosk-model-small-fr.zip` — French
+The resulting files (~40 MB each) are git-ignored:
 
-Download from https://alphacephei.com/vosk/models (use the "small" variants for browser use).
+- `vosk-model-small-en-us-0.15.tar.gz`
+- `vosk-model-small-fr-0.22.tar.gz`
 
-Files in this folder are git-ignored except for this README.
+To update a model version, edit the `MODELS` array in the script and
+delete the old `.tar.gz` so the next build re-downloads.

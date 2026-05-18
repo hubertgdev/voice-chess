@@ -29,6 +29,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Cache Vosk models
+        uses: actions/cache@v4
+        with:
+          path: public/models/*.tar.gz
+          key: vosk-models-${{ hashFiles('scripts/fetch-vosk-models.mjs') }}
+
       - name: Build
         env:
           BASE_URL: /${{ github.event.repository.name }}/
