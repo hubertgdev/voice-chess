@@ -4,6 +4,8 @@ export interface StatusBarHandlers {
   onReset: () => void
   onToggleVoice: () => void
   onLanguageChange: (lang: Language) => void
+  onToggleAi: (enabled: boolean) => void
+  onSkillChange: (skill: number) => void
 }
 
 export class StatusBar {
@@ -13,6 +15,9 @@ export class StatusBar {
   private partialEl: HTMLElement
   private voiceBtn: HTMLButtonElement
   private langSelect: HTMLSelectElement
+  private aiCheckbox: HTMLInputElement
+  private skillSlider: HTMLInputElement
+  private skillValue: HTMLElement
 
   constructor(handlers: StatusBarHandlers) {
     this.root = el('div', 'status-bar')
@@ -52,7 +57,33 @@ export class StatusBar {
     const controls = el('div', 'status-bar__controls')
     controls.append(this.langSelect, this.voiceBtn, resetBtn)
 
-    this.root.append(turnRow, this.messageEl, this.partialEl, controls)
+    const aiRow = el('div', 'status-bar__ai')
+    const aiLabel = document.createElement('label')
+    aiLabel.className = 'status-bar__ai-toggle'
+    this.aiCheckbox = document.createElement('input')
+    this.aiCheckbox.type = 'checkbox'
+    this.aiCheckbox.addEventListener('change', () => handlers.onToggleAi(this.aiCheckbox.checked))
+    aiLabel.append(this.aiCheckbox, document.createTextNode(' Play vs AI'))
+
+    const skillLabel = document.createElement('label')
+    skillLabel.className = 'status-bar__skill'
+    this.skillSlider = document.createElement('input')
+    this.skillSlider.type = 'range'
+    this.skillSlider.min = '0'
+    this.skillSlider.max = '20'
+    this.skillSlider.step = '1'
+    this.skillSlider.value = '5'
+    this.skillValue = el('span', 'status-bar__skill-value', '5')
+    this.skillSlider.addEventListener('input', () => {
+      const v = Number(this.skillSlider.value)
+      this.skillValue.textContent = String(v)
+      handlers.onSkillChange(v)
+    })
+    skillLabel.append(document.createTextNode('Skill '), this.skillSlider, this.skillValue)
+
+    aiRow.append(aiLabel, skillLabel)
+
+    this.root.append(turnRow, this.messageEl, this.partialEl, controls, aiRow)
   }
 
   setTurn(color: Color, inCheck: boolean): void {
@@ -75,6 +106,17 @@ export class StatusBar {
 
   setLanguage(lang: Language): void {
     this.langSelect.value = lang
+  }
+
+  setAi(enabled: boolean, busy = false): void {
+    this.aiCheckbox.checked = enabled
+    this.aiCheckbox.disabled = busy
+    this.skillSlider.disabled = !enabled || busy
+  }
+
+  setSkill(level: number): void {
+    this.skillSlider.value = String(level)
+    this.skillValue.textContent = String(level)
   }
 }
 

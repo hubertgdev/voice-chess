@@ -1,3 +1,4 @@
+import { StockfishEngine } from '../ai/StockfishEngine'
 import { BoardView } from '../render/Board'
 import type { Color, Language, Square } from '../types'
 import { StatusBar } from '../ui/StatusBar'
@@ -6,21 +7,31 @@ import type { VoiceState } from '../voice/VoiceController'
 import { VoiceController } from '../voice/VoiceController'
 import { ChessEngine } from './ChessEngine'
 
+const AI_COLOR: Color = 'b'
+const AI_MOVETIME_MS = 600
+
 export class GameController {
   private engine = new ChessEngine()
   private board = new BoardView()
   private status: StatusBar
   private voice: VoiceController
+  private ai = new StockfishEngine()
   private selected: Square | null = null
   private lastMove: { from: Square; to: Square } | null = null
   private language: Language = 'en'
   private isAnimating = false
+  private aiEnabled = false
+  private aiThinking = false
+  private aiGeneration = 0
+  private skill = 5
 
   constructor() {
     this.status = new StatusBar({
       onReset: () => this.reset(),
       onToggleVoice: () => this.toggleVoice(),
       onLanguageChange: (lang) => this.changeLanguage(lang),
+      onToggleAi: (enabled) => this.toggleAi(enabled),
+      onSkillChange: (skill) => this.changeSkill(skill),
     })
     this.voice = new VoiceController(this.language, {
       onFinal: (text) => this.handleVoiceFinal(text),
@@ -37,14 +48,17 @@ export class GameController {
     root.appendChild(boardContainer)
     await this.board.init(boardContainer)
     this.board.setOnSquareClick((sq) => this.handleSquareClick(sq))
+    this.status.setSkill(this.skill)
+    this.status.setAi(false)
     this.syncBoard()
     this.refreshStatus()
   }
 
   private handleSquareClick(sq: Square): void {
-    if (this.isAnimating) return
+    if (this.isAnimating || this.aiThinking) return
     const status = this.engine.status()
     if (status.gameOver) return
+    if (this.aiEnabled && status.turn === AI_COLOR) return
 
     const piece = this.engine.pieceAt(sq)
 
@@ -94,6 +108,78 @@ export class GameController {
     this.isAnimating = false
     this.refreshStatus(result.san)
     this.refreshHighlights()
+    void this.maybeTriggerAi()
+  }
+
+  private async maybeTriggerAi(): Promise<void> {
+    if (!this.aiEnabled) return
+    const status = this.engine.status()
+    if (status.gameOver) return
+    if (status.turn !== AI_COLOR) return
+    await this.runAiMove()
+  }
+
+  private async runAiMove(): Promise<void> {
+    this.aiThinking = true
+    const myGen = ++this.aiGeneration
+    this.status.setMessage('AI is thinking…', 'info')
+    try {
+      const move = await this.ai.bestMove(this.engine.fen(), AI_MOVETIME_MS)
+      if (myGen !== this.aiGeneration) return
+      this.aiThinking = false
+      if (!move) {
+        this.status.setMessage('AI returned no move', 'error')
+        return
+      }
+      const result = this.engine.move(move.from, move.to)
+      if (!result.ok) {
+        this.status.setMessage(`AI illegal move: ${move.from}${move.to}`, 'error')
+        return
+      }
+      this.lastMove = { from: move.from, to: move.to }
+      this.isAnimating = true
+      await this.board.animateMove(move.from, move.to, this.engine.pieces())
+      this.isAnimating = false
+      this.refreshStatus(result.san)
+      this.refreshHighlights()
+    } catch (err) {
+      if (myGen !== this.aiGeneration) return
+      this.aiThinking = false
+      const msg = err instanceof Error ? err.message : String(err)
+      this.status.setMessage(`AI error: ${msg}`, 'error')
+    }
+  }
+
+  private async toggleAi(enabled: boolean): Promise<void> {
+    if (enabled === this.aiEnabled) return
+    if (enabled) {
+      this.status.setAi(true, true)
+      this.status.setMessage('Loading AI…', 'info')
+      try {
+        await this.ai.init()
+        this.ai.setSkill(this.skill)
+        this.ai.newGame()
+        this.aiEnabled = true
+        this.status.setAi(true, false)
+        this.status.setMessage('AI ready', 'success')
+        void this.maybeTriggerAi()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        this.status.setMessage(`Failed to load AI: ${msg}`, 'error')
+        this.status.setAi(false, false)
+        this.aiEnabled = false
+      }
+    } else {
+      this.ai.stop()
+      this.aiEnabled = false
+      this.status.setAi(false, false)
+      this.status.setMessage('AI disabled', 'info')
+    }
+  }
+
+  private changeSkill(level: number): void {
+    this.skill = level
+    this.ai.setSkill(level)
   }
 
   private handleVoiceFinal(text: string): void {
@@ -106,6 +192,10 @@ export class GameController {
       return
     }
     if (outcome.kind === 'move') {
+      if (this.aiEnabled && this.engine.status().turn === AI_COLOR) {
+        this.status.setMessage('Wait for the AI to move', 'error')
+        return
+      }
       const { from, to } = outcome.move
       this.status.setMessage(`Heard: ${from} → ${to}`, 'info')
       void this.attemptMove(from, to)
@@ -151,13 +241,20 @@ export class GameController {
   }
 
   private reset(): void {
+    this.aiGeneration++
+    if (this.aiThinking) {
+      this.ai.stop()
+      this.aiThinking = false
+    }
     this.engine.reset()
     this.selected = null
     this.lastMove = null
     this.syncBoard()
     this.refreshStatus()
     this.refreshHighlights()
+    if (this.aiEnabled) this.ai.newGame()
     this.status.setMessage('New game', 'success')
+    void this.maybeTriggerAi()
   }
 
   private syncBoard(): void {

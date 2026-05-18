@@ -126,6 +126,38 @@ body {
   min-width: 110px;
 }
 
+.status-bar__ai {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding-top: 4px;
+  border-top: 1px solid #3a3a3a;
+}
+
+.status-bar__ai-toggle,
+.status-bar__skill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+}
+
+.status-bar__skill input[type="range"] {
+  width: 140px;
+}
+
+.status-bar__skill input[type="range"]:disabled {
+  opacity: 0.5;
+}
+
+.status-bar__skill-value {
+  min-width: 1.5em;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 480px) {
   #app {
     padding: 12px 8px 24px;
