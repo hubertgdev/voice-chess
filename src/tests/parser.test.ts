@@ -38,13 +38,36 @@ describe('parseUtterance (English)', () => {
     if (r.kind === 'move') expect(r.move).toEqual({ from: 'a7', to: 'a8' })
   })
 
+  it('parses a single square as a select', () => {
+    const r = parseUtterance('e 2', 'en')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('e2')
+  })
+
+  it('parses "select e two" as a square', () => {
+    const r = parseUtterance('select e two', 'en')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('e2')
+  })
+
+  it('parses a compound "e2" as a square', () => {
+    const r = parseUtterance('e2', 'en')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('e2')
+  })
+
   it('recognises a reset command', () => {
     expect(parseUtterance('reset', 'en').kind).toBe('reset')
     expect(parseUtterance('start a new game', 'en').kind).toBe('reset')
   })
 
-  it('returns incomplete when only half the move is heard', () => {
-    const r = parseUtterance('e two', 'en')
+  it('returns incomplete when only a file is heard', () => {
+    const r = parseUtterance('echo', 'en')
+    expect(r.kind).toBe('incomplete')
+  })
+
+  it('returns incomplete when one and a half squares are heard', () => {
+    const r = parseUtterance('e two e', 'en')
     expect(r.kind).toBe('incomplete')
   })
 
@@ -71,6 +94,12 @@ describe('parseUtterance (French)', () => {
     const r = parseUtterance('bé un cé trois', 'fr')
     expect(r.kind).toBe('move')
     if (r.kind === 'move') expect(r.move).toEqual({ from: 'b1', to: 'c3' })
+  })
+
+  it('parses a French single square "e deux"', () => {
+    const r = parseUtterance('e deux', 'fr')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('e2')
   })
 
   it('recognises a French reset', () => {

@@ -244,11 +244,47 @@ export class GameController {
       void this.attemptMove(from, to)
       return
     }
+    if (outcome.kind === 'square') {
+      this.handleVoiceSquare(outcome.square)
+      return
+    }
     if (outcome.kind === 'incomplete') {
       this.status.setMessage(`Heard partial: ${outcome.partial.join('')}`, 'error')
       return
     }
     this.status.setMessage(`Did not understand: "${text}"`, 'error')
+  }
+
+  private handleVoiceSquare(sq: Square): void {
+    if (!this.canHumanInteract()) return
+    const status = this.engine.status()
+    const piece = this.engine.pieceAt(sq)
+
+    if (this.selected) {
+      if (this.selected === sq) {
+        this.status.setMessage(`${sq} already selected`, 'info')
+        return
+      }
+      if (piece && piece.color === status.turn) {
+        this.selectSquare(sq)
+        this.status.setMessage(`Selected ${sq}`, 'info')
+        return
+      }
+      if (this.engine.legalDestinations(this.selected).includes(sq)) {
+        this.status.setMessage(`Heard: ${this.selected} → ${sq}`, 'info')
+        void this.attemptMove(this.selected, sq)
+        return
+      }
+      this.status.setMessage(`${sq} is not a legal move`, 'info')
+      return
+    }
+
+    if (piece && piece.color === status.turn) {
+      this.selectSquare(sq)
+      this.status.setMessage(`Selected ${sq}`, 'info')
+      return
+    }
+    this.status.setMessage(`No piece to select on ${sq}`, 'info')
   }
 
   private handleVoiceStateChange(s: VoiceState): void {
