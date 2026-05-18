@@ -13,7 +13,8 @@ export function parseUtterance(raw: string, lang: Language): ParseOutcome {
   if (!trimmed) return { kind: 'unknown', raw }
 
   const dict = getDictionary(lang)
-  const rawTokens = trimmed
+  const normalised = lang === 'fr' ? trimmed.replace(/\bj['‘’`\s]+ai\b/g, 'ji') : trimmed
+  const rawTokens = normalised
     .replace(/[.,;!?'‘’`]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)

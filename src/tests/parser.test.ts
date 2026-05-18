@@ -132,6 +132,24 @@ describe('parseUtterance (French)', () => {
     if (r.kind === 'square') expect(r.square).toBe('c2')
   })
 
+  it('handles Vosk-FR "j\'ai" as letter G', () => {
+    const r = parseUtterance("j'ai un", 'fr')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('g1')
+  })
+
+  it('handles "j ai" (split with whitespace) as letter G', () => {
+    const r = parseUtterance('j ai un', 'fr')
+    expect(r.kind).toBe('square')
+    if (r.kind === 'square') expect(r.square).toBe('g1')
+  })
+
+  it('parses a full French move with "j\'ai" misrecognitions', () => {
+    const r = parseUtterance("j'ai un j'ai cinq", 'fr')
+    expect(r.kind).toBe('move')
+    if (r.kind === 'move') expect(r.move).toEqual({ from: 'g1', to: 'g5' })
+  })
+
   it('recognises a French reset', () => {
     expect(parseUtterance('recommencer', 'fr').kind).toBe('reset')
   })
